@@ -1,0 +1,682 @@
+<html>
+	<head>
+		<title>CSE332 Project 3</title>
+		<style>
+
+			*{
+				overflow-x: visible;
+			}
+
+			ul {
+				list-style-type: none;
+				text-align: center;
+			}
+
+			ul li {
+				display: inline;
+			}
+
+			h1,h3 {
+				text-align: center;
+			}
+
+			text{
+				font-size: 1em;
+			}
+
+			svg {
+			  font: 10px sans-serif;
+			}
+		
+			.options {
+				position: absolute;
+				left:70%;
+				top:15%;
+			}
+
+			circle {
+				transform: 0.2s all ease;
+			}
+
+		</style>
+		<script type="text/javascript" src="https://d3js.org/d3.v4.min.js"></script>
+	</head>
+	<body>
+
+		<!--Main menu to access the data displays easily-->
+		<h1>Welcome to my Interactive CSE 332 Project 5 Submission</h1>
+		<ul>
+			<li><a href="Scatterplot">Bivariate scatterplot</a></li>
+			<li>|</li>
+			<li><a href="Parallel">Parallel Coordinates display</a></li>
+			<li>|</li>
+			<li><a href="Biplot">Biplot</a></li>
+			<li>|</li>
+			<li><a href="MDS_data">MDS display of data</a></li>
+		</ul>
+
+		<div class="options">
+			<h2>Interactive brush options</h2>
+			<select class="brushes" onchange="swap_brush(this.value);">
+				<option value="Highlight">Highlight</option>
+				<option value="Ignore">Ignore</option>
+				<option value="Filter">Filter</option>
+				<option value="Enlarge">Enlarge</option>
+			</select>
+		</div>
+
+		<br>
+		<br>
+		<br>
+
+		<table>
+			<tr>
+			<td >
+				<!--Dropdown to select y-axis-->
+				<select class="dropdown" onchange="set_axis_one(this.value);">
+				    <option value="0">Color </option>
+				    <option value="1">Number of reviews (Critics) </option>
+				    <option value="2">Duration </option>
+				    <option value="3">Main Actor Facebook likes </option>
+				    <option value="4">Gross </option>
+				    <option value="5">Number of users voted </option>
+				    <option value="6">Cast total Facebook likes </option>
+				    <option value="7">Number of reviews (Users) </option>
+				    <option value="8">Language </option>
+				    <option value="9">Country </option>
+				    <option value="10">Content Rating </option>
+				    <option value="11">Budget </option>
+				    <option value="12">Title year </option>
+				    <option value="13">Imdb score </option>
+				    <option value="14">Aspect ratio </option>
+				</select>
+
+				<p>Vs.</p>
+
+				<!--Dropdown to select x-axis-->
+				<select class="dropdown" onchange="set_axis_two(this.value);">
+				    <option value="0">Color </option>
+				    <option value="1">Number of reviews (Critics) </option>
+				    <option value="2">Duration </option>
+				    <option value="3">Main Actor Facebook likes </option>
+				    <option value="4">Gross </option>
+				    <option value="5">Number of users voted </option>
+				    <option value="6">Cast total Facebook likes </option>
+				    <option value="7">Number of reviews (Users) </option>
+				    <option value="8">Language </option>
+				    <option value="9">Country </option>
+				    <option value="10">Content Rating </option>
+				    <option value="11">Budget </option>
+				    <option value="12">Title year </option>
+				    <option value="13">Imdb score </option>
+				    <option value="14">Aspect ratio </option>
+				</select>
+
+				<div class="sp"></div>
+			</td>
+			<td class="pp"></td>
+			<tr>
+				
+				<td class="bp"></td>
+				<td class="md"></td>
+			</tr>
+		</table>
+
+	</body>
+
+	<script>	
+
+			var brush_type = "Highlight";
+
+			//Global variables for actual brushes
+			var scatterbrush;
+			var pcabrush;
+			var bibrush;
+			var mdsbrush;
+
+			//Global anonymous functions, assigned inside each chart function
+			var scatterbrushFunc;
+			var pcabrushFunc;
+			var bibrushFunc;
+			var mdsbrushFunc;
+
+			pp(); // PCA plot
+			bp(); // BIplot
+			md(); // MDS display of data
+
+			function swap_brush(type){
+				brush_type = type;
+			}
+
+			/** SCATTERPLOT **/
+
+			//Stores csv data
+			var data_array;
+
+			//Contain the column number of each axis in the data csv
+			var axis_1 = 0;
+			var axis_2 = 0;
+
+			//Canvas dimensions
+			var canvasWidth = 500;
+			var canvasHeight = 400;
+
+			//Plot dimensions
+			var plotWidth = 400;
+			var plotHeight = 300;
+
+			//Create the canvas for the scatterplot
+			var canvas = d3.select(".sp").append("svg")
+									.attr("width",canvasWidth)
+									.attr("height",canvasHeight);
+			
+			//Load CSV into 2D array
+			d3.text("../final_reduced_data.csv", function(data){
+				data_array = d3.csvParseRows(data);
+				data_array.shift(); //Pop off header row
+				data_array = d3.transpose(data_array); //Transpose to make data easier to work with
+
+				//Correct data strings to numbers
+				for(var i = 0;i < data_array.length;i++){
+					for(var j = 0;j < data_array[i].length;j++){
+						data_array[i][j] = +data_array[i][j];
+					}
+				}
+
+				draw_scatterplot();
+			});
+
+			function draw_scatterplot(){
+
+				//Load in the selected columns
+				var data_array_one = data_array[axis_1];
+				var data_array_two = data_array[axis_2];
+
+				//Create scales for axes ticks
+				var axis_one_scale = d3.scaleLinear().domain(d3.extent(data_array_one)).range([(canvasWidth - plotWidth)/2,plotWidth]);
+				var axis_two_scale = d3.scaleLinear().domain(d3.extent(data_array_two)).range([plotHeight,(canvasHeight - plotHeight)/2]);
+
+				//Clear old scatterplot
+				canvas.selectAll("circle").remove();
+				canvas.selectAll("g").remove();
+
+				//Make the title
+				var title = canvas.append("text")
+									.text("Scatterplot") //Pop off the column header and make it the title
+									.attr("class","title") 
+									.attr("x",200)
+									.attr("y",25);
+
+				//Plot the scatterplot points to coordinates
+				var plot_points = canvas.selectAll("circle").data(data_array_one).enter()
+										.append("circle")
+										.attr("cx",function (d) { return axis_one_scale(d);})
+										.attr("cy",function (d,i) { return axis_two_scale(data_array_two[i]);})
+										.attr("r",2)
+										.attr("fill","blue");
+
+				//Add axes
+				var axis_bottom = canvas.append("g").attr("transform","translate(0,"+plotHeight+")").call(d3.axisBottom(axis_one_scale)).selectAll('text').style("text-anchor","end").attr("dx","-1em").attr("dy","-0.5em").attr("transform","rotate(-90)");
+	    		var axis_left = canvas.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(axis_two_scale));
+
+	    		scatterbrush = d3.brush().extent([[(canvasWidth - plotWidth)/2,(canvasHeight-plotHeight)/2],[plotWidth,plotHeight]]).on("brush",function(){
+
+	    			if(!d3.event.selection) return;
+				    				var indices= [];
+				    				var s = d3.event.selection;
+
+				    				plot_points.each(function(d,i){
+				    					var point = d3.select(this);
+				    					if(point.attr("cx") >= s[0][0] && point.attr("cx") <= s[1][0] && point.attr("cy") >= s[0][1] && point.attr("cy") <= s[1][1]) indices.push(i);
+				    				});
+
+				    				brush(indices);
+	    		});
+
+	    		//brush
+	    		canvas.append("g")
+				    .attr("class", "brush")
+				    .call(scatterbrush);
+
+				scatterbrushFunc = function(indices){
+					canvas.selectAll("circle").attr("fill","blue").attr("r",2);
+					if(brush_type == "Highlight"){
+						canvas.selectAll("circle").filter(
+							function(d,i){
+								return indices.indexOf(i) != -1;
+							}).attr("fill","red");
+					}else if (brush_type == "Ignore"){
+						canvas.selectAll("circle").filter(
+							function(d,i){
+								return indices.indexOf(i) != -1;
+							}).attr("fill","transparent");
+					}else if (brush_type == "Filter"){
+						canvas.selectAll("circle").filter(
+							function(d,i){
+								return indices.indexOf(i) == -1;
+							}).attr("fill","transparent");
+					}else if (brush_type == "Enlarge"){
+						canvas.selectAll("circle").filter(
+							function(d,i){
+								return indices.indexOf(i) != -1;
+							}).attr("r",4);
+					}
+				};
+
+			};
+
+			//Function used for dropdown to switch axis
+			function set_axis_one(new_axis){
+				axis_1 = +new_axis;
+				draw_scatterplot();
+			};
+
+			//Function used for dropdown to switch axis
+			function set_axis_two(new_axis){
+				axis_2 = +new_axis;
+				draw_scatterplot();
+			};
+
+			function pp(){
+						//Stores csv data
+						var data_array;
+
+						var axis_1 = 0;
+						var axis_2 = 1;
+
+						//Canvas dimensions
+						var canvasWidth = 500;
+						var canvasHeight = 400;
+
+						//Plot dimensions
+						var plotWidth = 400;
+						var plotHeight = 300;
+
+						var xshift = 50;
+
+						//Create the canvas for the scatterplot
+						var canvas = d3.select(".pp").append("svg")
+												.attr("width",canvasWidth)
+												.attr("height",canvasHeight);
+						
+						//Load CSV into 2D array
+						d3.text("components.csv", function(data){
+							data_array = d3.csvParseRows(data);
+							data_array = d3.transpose(data_array); //Transpose to make data easier to work with
+
+							//Correct data strings to numbers
+							for(var i = 0;i < data_array.length;i++){
+								for(var j = 0;j < data_array[i].length;j++){
+									data_array[i][j] = +data_array[i][j];
+								}
+							}
+
+							draw_pcaplot();
+						});
+
+						function draw_pcaplot(){
+
+							//Load in the selected columns
+							var data_array_one = data_array[axis_1];
+							var data_array_two = data_array[axis_2];
+
+							//Create scales for axes ticks
+							var axis_one_scale = d3.scaleLinear().domain(d3.extent(data_array_one)).range([xshift+(canvasWidth - plotWidth)/2,xshift+plotWidth]);
+							var axis_two_scale = d3.scaleLinear().domain(d3.extent(data_array_two)).range([plotHeight,(canvasHeight - plotHeight)/2]);
+
+							//Clear old scatterplot
+							canvas.selectAll("circle").remove();
+							canvas.selectAll("g").remove();
+
+							//Make the title
+							var title = canvas.append("text")
+												.text("PCA plot") //Pop off the column header and make it the title
+												.attr("class","title") 
+												.attr("x",200)
+												.attr("y",25);
+
+							//Plot the scatterplot points to coordinates
+							var plot_points = canvas.selectAll("circle").data(data_array_one).enter()
+													.append("circle")
+													.attr("cx",function (d) { return axis_one_scale(d);})
+													.attr("cy",function (d,i) { return axis_two_scale(data_array_two[i]);})
+													.attr("r",2)
+													.attr("fill","blue");
+
+							//Add axes
+							var axis_bottom = canvas.append("g").attr("transform","translate(0,"+plotHeight+")").call(d3.axisBottom(axis_one_scale)).selectAll('text').style("text-anchor","end").attr("dx","-1em").attr("dy","-0.5em").attr("transform","rotate(-90)");
+				    		var axis_left = canvas.append("g").attr("transform","translate("+(50+xshift)+",0)").call(d3.axisLeft(axis_two_scale));
+
+				    		pcabrush = d3.brush().extent([[xshift + (canvasWidth - plotWidth)/2,(canvasHeight-plotHeight)/2],[xshift+plotWidth,plotHeight]]).on("brush",function(){
+				    				if(!d3.event.selection) return;
+				    				var indices= [];
+				    				var s = d3.event.selection;
+
+				    				plot_points.each(function(d,i){
+				    					var point = d3.select(this);
+				    					if(point.attr("cx") >= s[0][0] && point.attr("cx") <= s[1][0] && point.attr("cy") >= s[0][1] && point.attr("cy") <= s[1][1]){ 
+				    						indices.push(i);
+				    					}
+				    				});
+				    				brush(indices);
+				    		});
+
+	    		    		//brush
+	    		    		canvas.append("g")
+	    					    .attr("class", "brush")
+	    					    .call(pcabrush);
+
+	    					pcabrushFunc = function(indices){
+	    						canvas.selectAll("circle").attr("fill","blue").attr("r",2);
+	    						if(brush_type == "Highlight"){
+	    							canvas.selectAll("circle").filter(
+	    								function(d,i){
+	    									return indices.indexOf(i) != -1;
+	    								}).attr("fill","red");
+	    						}else if (brush_type == "Ignore"){
+	    							canvas.selectAll("circle").filter(
+	    								function(d,i){
+	    									return indices.indexOf(i) != -1;
+	    								}).attr("fill","transparent");
+	    						}else if (brush_type == "Filter"){
+	    							canvas.selectAll("circle").filter(
+	    								function(d,i){
+	    									return indices.indexOf(i) == -1;
+	    								}).attr("fill","transparent");
+	    						}else if (brush_type == "Enlarge"){
+									canvas.selectAll("circle").filter(
+										function(d,i){
+											return indices.indexOf(i) != -1;
+										}).attr("r",4);
+								}
+
+	    					};
+
+						};
+			}
+
+
+			function bp(){
+				//Stores csv data
+				var data_array;
+				var vects;
+				var labels;
+
+				var axis_1 = 0;
+				var axis_2 = 1;
+
+				//Canvas dimensions
+				var canvasWidth = 500;
+				var canvasHeight = 400;
+
+				//Plot dimensions
+				var plotWidth = 400;
+				var plotHeight = 300;
+
+				var xshift = 50;
+
+				//Create the canvas for the biplot
+				var canvas = d3.select(".bp").append("svg")
+										.attr("width",canvasWidth)
+										.attr("height",canvasHeight);
+				
+				//Load CSV into 2D array
+				d3.text("biplot_vectors.csv", function(vectors){
+					d3.text("biplot_points.csv",function(points){
+						d3.text("component_labels.csv",function(labs){
+
+							labels = d3.transpose(d3.csvParseRows(labs))[0];
+							data_array = d3.csvParseRows(points);
+							data_array = d3.transpose(data_array); //Transpose to make data easier to work with
+
+							//Correct data strings to numbers
+							for(var i = 0;i < data_array.length;i++){
+								for(var j = 0;j < data_array[i].length;j++){
+									data_array[i][j] = +data_array[i][j];
+								}
+							}
+
+							vects = d3.csvParseRows(vectors);
+							vects = d3.transpose(vects); //Transpose to make data easier to work with
+
+							//Correct data strings to numbers
+							for(var i = 0;i < vects.length;i++){
+								for(var j = 0;j < vects[i].length;j++){
+									vects[i][j] = +vects[i][j];
+								}
+							}
+
+							draw_biplot();
+						});
+					});
+				});
+
+				function draw_biplot(){
+
+					//Load in the selected columns
+					var data_array_one = data_array[axis_1];
+					var data_array_two = data_array[axis_2];
+
+					//Create scales for axes ticks
+					var axis_one_scale = d3.scaleLinear().domain(d3.extent(data_array_one)).range([xshift + (canvasWidth - plotWidth)/2,xshift + plotWidth]);
+					var axis_two_scale = d3.scaleLinear().domain(d3.extent(data_array_two)).range([plotHeight,(canvasHeight - plotHeight)/2]);
+
+					//Clear old scatterplot
+					canvas.selectAll("circle").remove();
+					canvas.selectAll("g").remove();
+
+					//Plot the scatterplot points to coordinates
+					var plot_points = canvas.selectAll("circle").data(data_array_one).enter()
+											.append("circle")
+											.attr("cx",function (d) { return axis_one_scale(d);})
+											.attr("cy",function (d,i) { return axis_two_scale(data_array_two[i]);})
+											.attr("r",2)
+											.attr("fill","blue");
+
+					var PCA_components = canvas.selectAll("line").data(vects[0]).enter()
+											.append("line")
+										    .attr("x1", 49 +xshift)
+										    .attr("y1", 199)
+										    .attr("x2", function(d){return axis_one_scale(d);})//CENTER
+										    .attr("y2", function(d,i){return axis_two_scale(vects[1][i]);}) //CENTER
+										    .attr("stroke-width", 2)
+										    .attr("stroke", "red");
+
+					var PCA_labels = canvas.selectAll("text").data(vects[0]).enter()
+											.append("text")
+										    .attr("x", function(d){return axis_one_scale(d);})//CENTER
+										    .attr("y", function(d,i){return axis_two_scale(vects[1][i]);}) //CENTER
+										    .text(function(d,i){ return labels[i];})
+										    .attr("stroke", "black");
+
+					//Make the title
+					var title = canvas.append("text")
+										.text("Biplot") //Pop off the column header and make it the title
+										.attr("class","title") 
+										.attr("x",200)
+										.attr("y",25);
+
+					//Add axes
+					var axis_bottom = canvas.append("g").attr("transform","translate(0,"+plotHeight+")").call(d3.axisBottom(axis_one_scale)).selectAll('text').style("text-anchor","end").attr("dx","-1em").attr("dy","-0.5em").attr("transform","rotate(-90)");
+		    		var axis_left = canvas.append("g").attr("transform","translate("+(50+xshift)+",0)").call(d3.axisLeft(axis_two_scale));
+
+		    		bibrush = d3.brush().extent([[xshift + (canvasWidth - plotWidth)/2,(canvasHeight-plotHeight)/2],[xshift+plotWidth,plotHeight]]).on("brush",function() { 
+			    			if(!d3.event.selection) return;
+		    				var indices= [];
+		    				var s = d3.event.selection;
+
+		    				plot_points.each(function(d,i){
+		    					var point = d3.select(this);
+		    					if(point.attr("cx") >= s[0][0] && point.attr("cx") <= s[1][0] && point.attr("cy") >= s[0][1] && point.attr("cy") <= s[1][1]) indices.push(i);
+		    				});
+
+		    				brush(indices);
+		    		});
+
+		    		//brush
+		    		canvas.append("g")
+					    .attr("class", "brush")
+					    .call(bibrush);
+
+					bibrushFunc = function(indices){
+						canvas.selectAll("circle").attr("fill","blue").attr("r",2);
+						if(brush_type == "Highlight"){
+							canvas.selectAll("circle").filter(
+								function(d,i){
+									return indices.indexOf(i) != -1;
+								}).attr("fill","red");
+						}else if (brush_type == "Ignore"){
+							canvas.selectAll("circle").filter(
+								function(d,i){
+									return indices.indexOf(i) != -1;
+								}).attr("fill","transparent");
+						}else if (brush_type == "Filter"){
+    							canvas.selectAll("circle").filter(
+    								function(d,i){
+    									return indices.indexOf(i) == -1;
+    								}).attr("fill","transparent");
+    						}else if (brush_type == "Enlarge"){
+								canvas.selectAll("circle").filter(
+									function(d,i){
+										return indices.indexOf(i) != -1;
+									}).attr("r",4);
+							}
+
+					};
+
+
+				};
+			};
+
+			function md(){
+				//Stores csv data
+					var data_array;
+
+					//Canvas dimensions
+					var canvasWidth = 500;
+					var canvasHeight = 400;
+
+					//Plot dimensions
+					var plotWidth = 400;
+					var plotHeight = 300;
+
+					//Create the canvas for the scatterplot
+					var canvas = d3.select(".md").append("svg")
+											.attr("width",canvasWidth)
+											.attr("height",canvasHeight);
+					
+					//Load CSV into 2D array
+					d3.text("mds_data.csv", function(data){
+						data_array = d3.csvParseRows(data);
+						data_array = d3.transpose(data_array); //Transpose to make data easier to work with
+
+						//Correct data strings to numbers
+						for(var i = 0;i < data_array.length;i++){
+							for(var j = 0;j < data_array[i].length;j++){
+								data_array[i][j] = +data_array[i][j];
+							}
+						}
+
+						draw_mds_data();
+					});
+
+					function draw_mds_data(){
+
+						//Load in the selected columns
+						var data_array_one = data_array[0];
+						var data_array_two = data_array[1];
+
+						//Create scales for axes ticks
+						var axis_one_scale = d3.scaleLinear().domain(d3.extent(data_array_one)).range([(canvasWidth - plotWidth)/2,plotWidth]);
+						var axis_two_scale = d3.scaleLinear().domain(d3.extent(data_array_two)).range([plotHeight,(canvasHeight - plotHeight)/2]);
+
+						//Clear old scatterplot
+						canvas.selectAll("circle").remove();
+						canvas.selectAll("g").remove();
+
+						//Make the title
+						var title = canvas.append("text")
+											.text("MDS display of data") //Pop off the column header and make it the title
+											.attr("class","title") 
+											.attr("x",250)
+											.attr("y",20);
+
+						//Plot the scatterplot points to coordinates
+						var plot_points = canvas.selectAll("circle").data(data_array_one).enter()
+												.append("circle")
+												.attr("cx",function (d) { return axis_one_scale(d);})
+												.attr("cy",function (d,i) { return axis_two_scale(data_array_two[i]);})
+												.attr("r",2)
+												.attr("fill","blue");
+
+						//Add axes
+						var axis_bottom = canvas.append("g").attr("transform","translate(0,"+plotHeight+")").call(d3.axisBottom(axis_one_scale)).selectAll('text').style("text-anchor","end").attr("dx","-1em").attr("dy","-0.5em").attr("transform","rotate(-90)");
+			    		var axis_left = canvas.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(axis_two_scale)).selectAll('text').style("display","none");
+			    		var axis_top = canvas.append("g").attr("transform","translate(0,"+((canvasHeight-plotHeight)/2)+")").call(d3.axisTop(axis_one_scale)).selectAll('text').style("display","none").attr("dx","-1em").attr("dy","0.5em").attr("transform","rotate(90)");
+			    		var axis_right = canvas.append("g").attr("transform","translate("+plotWidth+",0)").call(d3.axisRight(axis_two_scale));
+
+			    		mdsbrush = d3.brush().extent([[(canvasWidth - plotWidth)/2,(canvasHeight-plotHeight)/2],[plotWidth,plotHeight]]).on("brush",function(){
+
+			    			if(!d3.event.selection) return;
+			    			var indices= [];
+			    			var s = d3.event.selection;
+
+			    			plot_points.each(function(d,i){
+			    				var point = d3.select(this);
+			    				if(point.attr("cx") >= s[0][0] && point.attr("cx") <= s[1][0] && point.attr("cy") >= s[0][1] && point.attr("cy") <= s[1][1]) indices.push(i);
+			    			});
+
+			    			brush(indices);
+
+			    		});
+
+    		    		//brush
+			    		canvas.append("g")
+						    .attr("class", "brush")
+						    .call(mdsbrush);
+
+    					mdsbrushFunc = function(indices){
+    						canvas.selectAll("circle").attr("fill","blue").attr("r",2);
+    						if(brush_type == "Highlight"){
+    							canvas.selectAll("circle").filter(
+    								function(d,i){
+    									return indices.indexOf(i) != -1;
+    								}).attr("fill","red");
+    						}else if (brush_type == "Ignore"){
+    							canvas.selectAll("circle").filter(
+    								function(d,i){
+    									return indices.indexOf(i) != -1;
+    								}).attr("fill","transparent");
+    						}else if (brush_type == "Filter"){
+    							canvas.selectAll("circle").filter(
+    								function(d,i){
+    									return indices.indexOf(i) == -1;
+    								}).attr("fill","transparent");
+    						}else if (brush_type == "Enlarge"){
+								canvas.selectAll("circle").filter(
+									function(d,i){
+										return indices.indexOf(i) != -1;
+									}).attr("r",4);
+							}
+
+
+    					};
+					};
+			};
+
+
+			/** BRUSH FUNCTIONS **/
+
+			function brush(indices){
+
+				if(!indices) return;
+
+				scatterbrushFunc(indices);
+				pcabrushFunc(indices);
+				bibrushFunc(indices);
+				mdsbrushFunc(indices);
+	
+			}
+
+		</script>
+</html>
